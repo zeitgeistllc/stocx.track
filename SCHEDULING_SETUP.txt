@@ -1,0 +1,106 @@
+# SCHEDULING SETUP (Run Daily at 17:00 UTC)
+
+## OPTION 1: Linux/Mac (Cron)
+================================================================================
+Edit crontab:
+  crontab -e
+
+Add this line (17:00 UTC = 5:00 PM):
+  0 17 * * * cd /path/to/project && /usr/bin/python3 daily_pnl_automation.py >> daily_pnl.log 2>&1
+
+Verify:
+  crontab -l
+
+
+## OPTION 2: Windows (Task Scheduler)
+================================================================================
+1. Open Task Scheduler
+2. Create Basic Task:
+   - Name: "Daily PnL Tracking"
+   - Trigger: Daily, 17:00 UTC
+   - Action: Start a program
+     Program: C:\Python\python.exe
+     Arguments: daily_pnl_automation.py
+     Start in: C:\Users\YourUser\daily_pnl_project\
+
+3. Advanced:
+   - Run with highest privileges
+   - Run only when user is logged in
+   - Run whether user is logged in or not (if you want background execution)
+
+
+## OPTION 3: Python APScheduler (Cross-platform)
+================================================================================
+Install: pip install apscheduler
+
+Create scheduler.py:
+
+```python
+from apscheduler.schedulers.background import BackgroundScheduler
+from daily_pnl_automation import main
+import logging
+
+scheduler = BackgroundScheduler()
+
+# Schedule job for 17:00 UTC daily
+scheduler.add_job(
+    func=main,
+    trigger="cron",
+    hour=17,
+    minute=0,
+    timezone='UTC',
+    id='daily_pnl_job'
+)
+
+scheduler.start()
+
+try:
+    while True:
+        time.sleep(1)
+except KeyboardInterrupt:
+    scheduler.shutdown()
+```
+
+Run:
+  python scheduler.py
+
+
+## VERIFICATION
+================================================================================
+✓ Check log file daily:
+  tail -f daily_pnl.log
+
+✓ Verify CSV generation:
+  ls -la daily_pnl_outputs/
+
+✓ Dashboard updates:
+  Open daily_pnl_outputs/dashboard.html in browser (refresh for new data)
+
+
+## CUSTOMIZATION CHECKLIST
+================================================================================
+Before running in production:
+
+□ Fetch Data Source:
+  - [ ] Configure live data API (yfinance, IBKR, etc.)
+  - [ ] Replace mock data in fetch_data()
+
+□ Email Alerts (optional):
+  - [ ] Set EMAIL_ENABLED = True
+  - [ ] Configure Gmail App Password (or other SMTP)
+  - [ ] Set EMAIL_FROM, EMAIL_PASSWORD, EMAIL_TO
+
+□ Historical Tracking:
+  - [ ] Add database (SQLite) for signal history
+  - [ ] Implement PnL tracking (entry/exit prices)
+  - [ ] Calculate rolling win-rate
+
+□ Production Monitoring:
+  - [ ] Configure log rotation (daily_pnl.log grows over time)
+  - [ ] Add error alerting/monitoring
+  - [ ] Test failure scenarios
+
+□ Security:
+  - [ ] Store API keys/passwords in environment variables
+  - [ ] Secure cron/task scheduler access
+  - [ ] Audit log access & modifications

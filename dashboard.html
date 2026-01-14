@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily PnL Tracking - Value/Momentum Strategy</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+            margin: 5px 0;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .metric-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: center;
+            border-left: 4px solid #667eea;
+            transition: transform 0.2s;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .metric-label {
+            font-size: 0.85em;
+            color: #6c757d;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+        }
+
+        .metric-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+
+        .metric-subtitle {
+            font-size: 0.8em;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .signal-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin: 2px;
+        }
+
+        .signal-long { background: #d4edda; color: #155724; }
+        .signal-short { background: #f8d7da; color: #721c24; }
+        .signal-avoid { background: #fff3cd; color: #856404; }
+        .signal-hold { background: #e2e3e5; color: #383d41; }
+
+        .content {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-bottom: 30px;
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .table-container {
+            overflow-x: auto;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        th {
+            background: #2c3e50;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .ticker-column {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .positive { color: #27ae60; font-weight: 600; }
+        .negative { color: #e74c3c; font-weight: 600; }
+        .neutral { color: #95a5a6; }
+
+        .footer {
+            background: #f8f9fa;
+            padding: 20px 30px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 0.9em;
+            border-top: 2px solid #e9ecef;
+        }
+
+        .refresh-time {
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+            .grid-2 { grid-template-columns: 1fr; }
+            .header h1 { font-size: 1.8em; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- HEADER -->
+        <div class="header">
+            <h1>📊 Daily PnL Tracking Dashboard</h1>
+            <p>Value/Momentum Strategy | 10-Stock Universe</p>
+            <p style="margin-top: 15px; font-size: 0.95em;">
+                Last Updated: <span class="refresh-time">2026-01-14 11:17 AM IST</span>
+            </p>
+        </div>
+
+        <!-- METRICS GRID -->
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Portfolio Size</div>
+                <div class="metric-value">$100K</div>
+                <div class="metric-subtitle">Notional Capital</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Net Allocation</div>
+                <div class="metric-value">25.0%</div>
+                <div class="metric-subtitle">7 Active Positions</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Portfolio Return</div>
+                <div class="metric-value neutral">0.00%</div>
+                <div class="metric-subtitle">Day 1 (No PnL yet)</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Win Rate</div>
+                <div class="metric-value neutral">N/A</div>
+                <div class="metric-subtitle">TBD (1+ day required)</div>
+            </div>
+        </div>
+
+        <!-- CONTENT -->
+        <div class="content">
+            <!-- SIGNAL SUMMARY -->
+            <div class="section">
+                <h2>Signal Distribution (Today)</h2>
+                <div class="grid-2">
+                    <div class="chart-container">
+                        <canvas id="signalChart"></canvas>
+                    </div>
+                    <div style="display: flex; flex-direction: column; justify-content: center; gap: 15px;">
+                        <div>
+                            <span class="signal-badge signal-long">LONG</span>
+                            <strong style="margin-left: 10px;">4 Signals</strong>
+                            <p style="font-size: 0.9em; color: #666; margin-top: 5px;">10% allocation each</p>
+                        </div>
+                        <div>
+                            <span class="signal-badge signal-short">SHORT</span>
+                            <strong style="margin-left: 10px;">1 Signal</strong>
+                            <p style="font-size: 0.9em; color: #666; margin-top: 5px;">-5% allocation</p>
+                        </div>
+                        <div>
+                            <span class="signal-badge signal-avoid">AVOID</span>
+                            <strong style="margin-left: 10px;">2 Signals</strong>
+                            <p style="font-size: 0.9em; color: #666; margin-top: 5px;">-5% allocation (Overbought)</p>
+                        </div>
+                        <div>
+                            <span class="signal-badge signal-hold">HOLD</span>
+                            <strong style="margin-left: 10px;">3 Signals</strong>
+                            <p style="font-size: 0.9em; color: #666; margin-top: 5px;">No allocation</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PORTFOLIO ALLOCATION -->
+            <div class="section">
+                <h2>Portfolio Allocation by Position</h2>
+                <div class="grid-2">
+                    <div class="chart-container">
+                        <canvas id="allocationChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="exposureChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DETAILED SIGNALS TABLE -->
+            <div class="section">
+                <h2>Daily Signals - All Tickers</h2>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Ticker</th>
+                                <th>Close</th>
+                                <th>Signal</th>
+                                <th>RSI(14)</th>
+                                <th>5-Day %</th>
+                                <th>Trend</th>
+                                <th>Rationale</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="ticker-column">BRK-B</td>
+                                <td>$415.32</td>
+                                <td><span class="signal-badge signal-long">LONG</span></td>
+                                <td>62.5</td>
+                                <td class="positive">+1.50%</td>
+                                <td>BULLISH</td>
+                                <td>VALUE (9.3% from 52W low)</td>
+                            </tr>
+                            <tr>
+                                <td class="ticker-column">INTC</td>
+                                <td>$28.45</td>
+                                <td><span class="signal-badge signal-avoid">AVOID</span></td>
+                                <td class="negative">78.2</td>
+                                <td class="positive">+3.80%</td>
+                                <td>BEARISH</td>
+                                <td>OVERBOUGHT (RSI > 75)</td>
+                            </tr>
+                            <tr>
+                                <td class="ticker-column">XOM</td>
+                                <td>$118.92</td>
+                                <td><span class="signal-badge signal-long">LONG</span></td>
+                                <td>68.1</td>
+                                <td class="positive">+2.20%</td>
+                                <td>MIXED</td>
+                                <td>MOMENTUM (5-day > 2%)</td>
+                            </tr>
+                            <tr>
+                                <td class="ticker-column">CVX</td>
+                                <td>$145.67</td>
+                                <td><span class="signal-badge signal-hold">HOLD</span></td>
+                                <td>55.3</td>
+                                <td class="negative">-0.80%</td>
+                                <td>MIXED</td>
+                                <td>No signal criteria met</td>
+                            </tr>
+                            <tr>
+                                <td class="ticker-column">AA</td>
+                                <td>$32.18</td>
+                                <td><span class="signal-badge signal-long">LONG</span></td>
+                                <td>71.9</td>
+                                <td class="positive">+4.50%</td>
+                                <td>BULLISH</td>
+                                <td>MOMENTUM (5-day > 2%)</td>
+                            </tr>
+                            <tr>
+                                <td class="ticker-column">F</td>
+                                <td>$9.34</td>
+                                <td><span class="signal-badge signal-hold">HOLD</span></td>
+                                <td>48.2</td>
+                                <td class="negative">-1.20%</td>
+                                <td>BULLISH</td>
+                                <td>No signal criteria met</td>
+                            </tr>
+                            <tr>
+                                <td class="ticker-column">GM</td>
+                                <td>$43.21</td>
+                                <td><span class="signal-badge signal-avoid">AVOID</span></td>
+                                <td class="negative">82.7</td>
+                                <td class="positive">+6.10%</td>
+                                <td>BULLISH</td>
+                                <td>OVERBOUGHT (RSI > 75)</td>
+                            </tr>
+                            <tr>
+                                <td class="ticker-column">WFC</td>
+                                <td>$78.94</td>
+                                <td><span class="signal-badge signal-short">SHORT</span></td>
+                                <td>59.4</td>
+                                <td class="positive">+1.80%</td>
+                                <td>BEARISH</td>
+                                <td>BEARISH TREND</td>
+                            </tr>
+                            <tr>
+                                <td class="ticker-column">VLO</td>
+                                <td>$142.55</td>
+                                <td><span class="signal-badge signal-long">LONG</span></td>
+                                <td>73.2</td>
+                                <td class="positive">+3.50%</td>
+                                <td>MIXED</td>
+                                <td>MOMENTUM (5-day > 2%)</td>
+                            </tr>
+                            <tr>
+                                <td class="ticker-column">BAC</td>
+                                <td>$34.67</td>
+                                <td><span class="signal-badge signal-hold">HOLD</span></td>
+                                <td>61.8</td>
+                                <td class="positive">+1.20%</td>
+                                <td>MIXED</td>
+                                <td>No signal criteria met</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- POSITIONS TABLE -->
+            <div class="section">
+                <h2>Model Portfolio Positions</h2>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Ticker</th>
+                                <th>Signal</th>
+                                <th>Price</th>
+                                <th>Allocation</th>
+                                <th>Shares</th>
+                                <th>Position Value</th>
+                                <th>Daily PnL</th>
+                                <th>Return %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="ticker-column">BRK-B</td>
+                                <td><span class="signal-badge signal-long">LONG</span></td>
+                                <td>$415.32</td>
+                                <td class="positive">+10.0%</td>
+                                <td>24</td>
+                                <td>$9,967.68</td>
+                                <td class="neutral">$0.00</td>
+                                <td class="neutral">0.00%</td>
+                            </tr>
+                            <tr>
+                                <td class="ticker-column">INTC</td>
+                                <td><span class="signal-badge signal-avoid">AVOID</span></td>
+                                <td>$28.45</td>
+                                <td class="negative">-5.0%</td>
+                                <td>175</td>
+                                <td>$4,978.75</td>
+                                <td class="neutral">$0.00</td>
+                                <td class="neutral">0.00%</td>
+                            </tr>
+                            <tr>
+                                <td class="ticker-column">XOM</td>
+                                <td><span class="signal-badge signal-long">LONG</span></td>
+                                <td>$118.92</td>
+                                <td class="positive">+10.0%</td>
+                                <td>84</td>
+                                <td>$9,989.28</td>
+                                <td class="neutral">$0.00</td>
+                                <td class="neutral">0.00%</td>
+                            </tr>
+                            <tr>
+                                <td class="ticker-column">CVX</td>
+                                <td><span class="signal-badge signal-hold">HOLD</span></td>
+                                <td>$145.67</td>
+                                <td>0.0%</td>
+                                <td>0</td>
+                                <td>$0.00</td>
+                                <td class="neutral">$0.00</td>
+                                <td class="neutral">0.00%</td>
+                            </tr>
+                            <tr>
+                                <td class="ticker-column">AA</td>
+                                <td><span class="signal-badge signal-long">LONG</span></td>
+                                <td>$32.18</td>
+                                <td class="positive">+10.0%</td>
+                                <td>310</td>
+                                <td>$9,975.80</td>
+                                <td class="neutral">$0.00</td>
+                                <td class="neutral">0.00%</td>
+                            </tr>
+                            <tr>
+                                <td class="ticker-column">F</td>
+                                <td><span class="signal-badge signal-hold">HOLD</span></td>
+                                <td>$9.34</td>
+                                <td>0.0%</td>
+                                <td>0</td>
+                                <td>$0.00</td>
+                                <td class="neutral">$0.00</td>
+                                <td class="neutral">0.00%</td>
+                            </tr>
+                            <tr>
+                                <td class="ticker-column">GM</td>
+                                <td><span class="signal-badge signal-avoid">AVOID</span></td>
+                                <td>$43.21</td>
+                                <td class="negative">-5.0%</td>
+                                <td>115</td>
+                                <td>$4,969.15</td>
+                                <td class="neutral">$0.00</td>
+                                <td class="neutral">0.00%</td>
+                            </tr>
+                            <tr>
+                                <td class="ticker-column">WFC</td>
+                                <td><span class="signal-badge signal-short">SHORT</span></td>
+                                <td>$78.94</td>
+                                <td class="negative">-5.0%</td>
+                                <td>63</td>
+                                <td>$4,973.22</td>
+                                <td class="neutral">$0.00</td>
+                                <td class="neutral">0.00%</td>
+                            </tr>
+                            <tr>
+                                <td class="ticker-column">VLO</td>
+                                <td><span class="signal-badge signal-long">LONG</span></td>
+                                <td>$142.55</td>
+                                <td class="positive">+10.0%</td>
+                                <td>70</td>
+                                <td>$9,978.50</td>
+                                <td class="neutral">$0.00</td>
+                                <td class="neutral">0.00%</td>
+                            </tr>
+                            <tr>
+                                <td class="ticker-column">BAC</td>
+                                <td><span class="signal-badge signal-hold">HOLD</span></td>
+                                <td>$34.67</td>
+                                <td>0.0%</td>
+                                <td>0</td>
+                                <td>$0.00</td>
+                                <td class="neutral">$0.00</td>
+                                <td class="neutral">0.00%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- FOOTER -->
+        <div class="footer">
+            <p>📅 Analysis Date: 2026-01-14 | 🔄 Next Update: 2026-01-15 17:00 UTC (Post-US Close)</p>
+            <p style="margin-top: 10px;">Strategy: Value/Momentum | Universe: BRK-B, INTC, XOM, CVX, AA, F, GM, WFC, VLO, BAC</p>
+        </div>
+    </div>
+
+    <script>
+        // Signal Distribution Chart
+        const signalCtx = document.getElementById('signalChart').getContext('2d');
+        new Chart(signalCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['LONG (4)', 'SHORT (1)', 'AVOID (2)', 'HOLD (3)'],
+                datasets: [{
+                    data: [4, 1, 2, 3],
+                    backgroundColor: [
+                        '#28a745',
+                        '#dc3545',
+                        '#ffc107',
+                        '#6c757d'
+                    ],
+                    borderColor: '#fff',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { padding: 15, font: { size: 12, weight: '600' } }
+                    }
+                }
+            }
+        });
+
+        // Allocation Chart
+        const allocCtx = document.getElementById('allocationChart').getContext('2d');
+        new Chart(allocCtx, {
+            type: 'bar',
+            data: {
+                labels: ['BRK-B', 'INTC', 'XOM', 'AA', 'GM', 'WFC', 'VLO'],
+                datasets: [{
+                    label: 'Allocation %',
+                    data: [10, -5, 10, 10, -5, -5, 10],
+                    backgroundColor: function(context) {
+                        return context.parsed.y > 0 ? '#28a745' : '#dc3545';
+                    },
+                    borderRadius: 5,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: { beginAtZero: true, ticks: { callback: v => v + '%' } }
+                }
+            }
+        });
+
+        // Exposure Chart
+        const exposureCtx = document.getElementById('exposureChart').getContext('2d');
+        new Chart(exposureCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Long', 'Short/Avoid', 'Hold', 'Net'],
+                datasets: [{
+                    label: 'Allocation %',
+                    data: [40, -15, 0, 25],
+                    backgroundColor: ['#28a745', '#dc3545', '#6c757d', '#667eea'],
+                    borderRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: { beginAtZero: true, ticks: { callback: v => v + '%' } }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
