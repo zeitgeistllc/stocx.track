@@ -1,2 +1,5 @@
-# stocx.track
-tracking stocks and p/l for swing and opportunity trading
+# Zeitgeist LLC – Schwab Document Generator
+
+Run locally:
+pip install -r requirements.txt
+streamlit run app.py
