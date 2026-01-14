@@ -1,60 +1,74 @@
 import streamlit as st
-from docx import Document
-from datetime import date
-import io
+import pandas as pd
+import plotly.express as px
 
-st.set_page_config(page_title="Zeitgeist LLC – Schwab Docs", layout="centered")
+from strategy import Config, generate_signals, build_positions, daily_summary
+from data_source import load_price_history_from_csv, demo_mock_history
 
-st.title("Zeitgeist LLC – Schwab Transfer Documents")
-st.caption("Generate required Word documents for Charles Schwab")
+st.set_page_config(page_title="Daily PnL Dashboard", layout="wide")
 
-COMPANY_NAME = "Zeitgeist LLC"
-OWNER_NAME = "Niv Chen"
-CONFIRMATION_NUMBER = "TA04557418"
+DEFAULT_UNIVERSE = ['BRK-B', 'INTC', 'XOM', 'CVX', 'AA', 'F', 'GM', 'WFC', 'VLO', 'BAC']
 
-st.header("Account Information")
+st.title("Daily PnL Tracking — Value/Momentum Strategy")
 
-delivering_firm = st.text_input("Delivering Firm Name")
-delivering_account = st.text_input("Delivering Account Number")
-schwab_account = st.text_input("Schwab Account Number (optional)")
-execution_date = st.date_input("Execution Date", value=date.today())
+with st.sidebar:
+    st.header("Settings")
+    universe = st.text_area("Universe (comma-separated)", ",".join(DEFAULT_UNIVERSE)).replace("\n","")
+    universe = [u.strip() for u in universe.split(',') if u.strip()]
 
-def generate_corporate_resolution():
-    doc = Document()
-    doc.add_heading(f"{COMPANY_NAME}\nCORPORATE RESOLUTION", level=1)
-    doc.add_paragraph(
-        f"The undersigned, being the sole Member and Manager of {COMPANY_NAME}, "
-        "hereby adopts the following resolutions.\n\n"
-        f"{OWNER_NAME} is the sole Member and Manager and owns 100% of the company.\n\n"
-        f"{OWNER_NAME} is authorized to act on behalf of the company with Charles Schwab.\n\n"
-        f"Executed on {execution_date}."
-    )
-    doc.add_paragraph(f"{OWNER_NAME}\nSole Member and Manager\n{COMPANY_NAME}")
-    return doc
+    notional = st.number_input("Portfolio notional", min_value=1000.0, value=100000.0, step=1000.0)
+    value_52w = st.slider("Value: within X% of 52W low", min_value=0.0, max_value=0.5, value=0.15, step=0.01)
+    mom = st.slider("Momentum: 5D perf >", min_value=0.0, max_value=0.2, value=0.02, step=0.005)
+    rsi_ovb = st.slider("Overbought RSI(14) >", min_value=50, max_value=95, value=75, step=1)
+    long_alloc = st.slider("LONG allocation", min_value=0.0, max_value=0.5, value=0.10, step=0.01)
+    short_alloc = st.slider("SHORT/AVOID allocation", min_value=-0.5, max_value=0.0, value=-0.05, step=0.01)
 
-def generate_relinquishment_letter():
-    doc = Document()
-    doc.add_heading("Letter to Relinquish Account Ownership", level=1)
-    doc.add_paragraph(
-        f"Re: Confirmation {CONFIRMATION_NUMBER}\n\n"
-        f"I, {OWNER_NAME}, relinquish ownership of account {delivering_account} "
-        f"at {delivering_firm} for transfer to Schwab."
-    )
-    doc.add_paragraph(f"{OWNER_NAME}\n{COMPANY_NAME}")
-    return doc
+    data_mode = st.radio("Data mode", ["CSV files (data/) ", "Demo synthetic data"], index=1)
 
-if st.button("Generate Documents"):
-    if delivering_firm and delivering_account:
-        res = generate_corporate_resolution()
-        rel = generate_relinquishment_letter()
+cfg = Config(
+    universe=universe,
+    notional=float(notional),
+    value_52w_threshold=float(value_52w),
+    momentum_threshold=float(mom),
+    rsi_overbought=float(rsi_ovb),
+    long_allocation=float(long_alloc),
+    short_allocation=float(short_alloc),
+)
 
-        res_buf, rel_buf = io.BytesIO(), io.BytesIO()
-        res.save(res_buf)
-        rel.save(rel_buf)
+if data_mode.startswith("CSV"):
+    history = load_price_history_from_csv(cfg.universe, data_dir='data')
+    if len(history) == 0:
+        st.warning("No CSV files found in ./data. Switch to demo mode or add data/TICKER.csv files.")
+else:
+    history = demo_mock_history(cfg.universe)
 
-        st.download_button("Download Corporate Resolution", res_buf.getvalue(),
-            "Zeitgeist_LLC_Corporate_Resolution.docx")
-        st.download_button("Download Relinquishment Letter", rel_buf.getvalue(),
-            "Zeitgeist_LLC_Letter_to_Relinquish_Account_Ownership.docx")
-    else:
-        st.error("Delivering firm and account number required")
+signals = generate_signals(history, cfg)
+positions = build_positions(signals, cfg)
+summary = daily_summary(signals, positions, cfg)
+
+c1, c2, c3, c4 = st.columns(4)
+
+c1.metric("Universe", f"{len(cfg.universe)}")
+c2.metric("Active positions", f"{int(summary.loc[0,'Active_Positions'])}")
+c3.metric("Net allocation", f"{summary.loc[0,'Net_Allocation_%']}%")
+c4.metric("Total deployed", f"${summary.loc[0,'Total_Notional']:,.0f}")
+
+st.subheader("Signal distribution")
+if not signals.empty:
+    dist = signals['Signal'].value_counts().reset_index()
+    dist.columns = ['Signal','Count']
+    fig = px.pie(dist, values='Count', names='Signal', hole=0.45)
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("No signals computed — check data.")
+
+st.subheader("Signals")
+st.dataframe(signals, use_container_width=True)
+
+st.subheader("Positions")
+st.dataframe(positions, use_container_width=True)
+
+st.subheader("Daily summary")
+st.dataframe(summary, use_container_width=True)
+
+st.caption("Tip: For real data, place per-ticker CSVs under ./data with columns Date,Open,High,Low,Close,Volume.")
